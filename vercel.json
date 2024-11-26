@@ -12,10 +12,6 @@
       "dest": "/",
       "methods": ["GET", "POST", "PUT", "PATCH", "OPTIONS"]
     }
-  ],
-  "functions": {
-    "api/*.js": {
-      "runtime": "nodejs18.x"
-    }
-  }
+  ]
 }
+
