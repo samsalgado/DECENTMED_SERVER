@@ -7,6 +7,7 @@ const cors = require('cors');
 const cookieParser = require("cookie-parser");
 const app = express();
 // middleware
+// ok 
 app.use(cors({ origin: "http://localhost:3000", credentials: true })); // Adjust for frontend URL
 app.use(express())
 app.use(express.json());
