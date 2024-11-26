@@ -7,7 +7,7 @@ const cors = require('cors');
 const cookieParser = require("cookie-parser");
 const app = express();
 // middleware
-app.use(cors({ origin: "http://localhost:3000", credentials: true })); // Adjust for frontend URL
+app.use(cors({ origin: "https://themerlingroupworld.com", credentials: true })); // Adjust for frontend URL
 app.use(express())
 app.use(express.json());
 app.use(bodyParser.json());
