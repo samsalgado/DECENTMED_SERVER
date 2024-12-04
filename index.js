@@ -1,5 +1,3 @@
-
-
 const express = require('express');
 const app = express();
 const jwt = require("jsonwebtoken");
@@ -49,7 +47,7 @@ async function run() {
       res.send({ token })
     })
 
-
+// server check
     app.get('/', async (req, res) => {
       res.send('server is running')
     })
