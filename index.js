@@ -1,26 +1,28 @@
-require('dotenv').config();
+
+
 const express = require('express');
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const bodyParser = require("body-parser");
-const cors = require('cors');
-const cookieParser = require("cookie-parser");
 const app = express();
+const jwt = require("jsonwebtoken");
+const cors = require('cors');
+const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
+require('dotenv').config();
 // middleware
-app.use(cors({ origin: "https://themerlingroupworld.com", credentials: true })); // Adjust for frontend URL
-app.use(express())
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+const corsConfig = { origin: "https://themerlingroupworld.com", credentials: true, methods:['GET','POST','PUT','PATCH','DELETE'] }
+app.use(cors({ origin: "https://themerlingroupworld.com", credentials: true, methods:['GET','POST','PUT','PATCH','DELETE'] })); // Adjust for frontend URL
+// app.use(cors({ origin: "http://localhost:3000", credentials: true })); // Adjust for frontend URL
+app.options('',cors(corsConfig));
 app.use(bodyParser.json());
 app.use(cookieParser());
-app.use(express.static("public"));
+
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5001; // Choose a port for your server
 
 const crypto = require("crypto");
 const secret = crypto.randomBytes(64).toString("hex");
-console.log("JWT Secret:", secret);
-const SECRET_KEY = process.env.SECRET_KEY;
-
+app.use(express.static("public"));
 // mongoDb dataBase setUp***
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.wrgil.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
@@ -35,10 +37,9 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    client.connect();
     const usersCollection = client.db('decentMeds').collection('users')
     const paymentCollection = client.db('decentMeds').collection('paymentUser')
-
 
     // JWT post
     app.post('/jwt', (req, res) => {
@@ -50,15 +51,16 @@ async function run() {
 
 
     app.get('/', async (req, res) => {
-      res.send('hello server is running')
+      res.send('server is running')
     })
 
-
+// all user get api
     app.get('/users', async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result)
     })
 
+// payment history get api
     app.get('/payments-history', async (req, res) => {
       const result = await paymentCollection.find().toArray();
       res.send(result)
@@ -79,11 +81,10 @@ async function run() {
 
     // users data insert before code hide now
     app.post('/users', async (req, res) => {
-      const { name, email, password, role } = req.body;
-      const saltRounds = 10;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-      const totalUsers = { name, email, password: hashedPassword, role };
-      console.log(totalUsers, 20222);
+      const { name, email,role } = req.body;
+
+      const totalUsers = { name, email, role };
+
       const query = { email: totalUsers?.email }
       const existingUser = await usersCollection.findOne(query)
       if (existingUser) {
@@ -93,17 +94,12 @@ async function run() {
 
       const result = await usersCollection.insertOne(totalUsers);
       res.send(result);
-      console.log(result);
     })
-
-
-
-    // Stripe payment gateway
 
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
 
-      const amount = Math.round(price * 100);
+      const amount =  parseFloat(price) * 100 ;
       // Create a PaymentIntent with the order amount and currency
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
@@ -132,18 +128,15 @@ async function run() {
 
       // const existPayment = await paymentCollection.findOne({email:paymentDetails.email});
       // if (existPayment) {
-      //   console.log('exist payment');
       //   return res.send({ message: 'Already Payment Successful' })
       // }
       const paymentResult = await paymentCollection.insertOne(paymentDetails);
-      console.log(paymentResult);
       res.send(paymentResult)
     })
 
     // Admin approved valid bitcoin transaction:
     app.patch('/payments-history/:id', async (req, res) => {
       const id = req.params.id;
-      console.log(id);
       const status = req.query.status;
       const filter = { _id: new ObjectId(id) };
       const updateDoc = {
