@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const corsConfig = { origin: "https://themerlingroupworld.com", credentials: true, methods:['GET','POST','PUT','PATCH','DELETE'] }
 app.use(cors({ origin: "https://themerlingroupworld.com", credentials: true, methods:['GET','POST','PUT','PATCH','DELETE'] })); // Adjust for frontend URL
-// app.use(cors({ origin: "http://localhost:3000", credentials: true })); // Adjust for frontend URL
+app.use(cors({ origin: "http://localhost:3000", credentials: true })); // Adjust for frontend URL
 app.options('',cors(corsConfig));
 app.use(bodyParser.json());
 app.use(cookieParser());
