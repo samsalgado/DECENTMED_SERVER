@@ -9,12 +9,14 @@ require('dotenv').config();
 const app = express();
 
 const corsConfig = { origin: "https://themerlingroupworld.com", credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }
+// const corsConfig = { origin: "http://localhost:3000", credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }
 app.use(cors(corsConfig));
 app.use(express.json());
 
 
 const port = process.env.PORT || 5001;
-
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client("1055481939354-kahqsmu8kojqr57fkeftafted8umun54.apps.googleusercontent.com");
 
 
 let client;
@@ -76,7 +78,7 @@ app.get('/users', async (req, res) => {
 // User register
 app.post('/users', async (req, res) => {
   await connectToDB();
-  const { name, email, password } = req.body;
+  const { name, email, password, code } = req.body;
 
   const existingUser = await usersCollection.findOne({ email });
   if (existingUser) {
@@ -84,7 +86,7 @@ app.post('/users', async (req, res) => {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const newUser = { name, email, password: hashedPassword };
+  const newUser = { name, email, password: hashedPassword, code };
   const result = await usersCollection.insertOne(newUser);
 
   const token = jwt.sign(
@@ -95,6 +97,52 @@ app.post('/users', async (req, res) => {
 
   res.status(201).json({ message: 'Signup successful', token });
 });
+
+// Google Signup
+app.post('/google-signup', async (req, res) => {
+  await connectToDB();
+  const { credential } = req.body;
+
+  if (!credential) {
+    return res.status(400).json({ message: 'No credential provided' });
+  }
+
+  try {
+    // Verify Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: "1055481939354-kahqsmu8kojqr57fkeftafted8umun54.apps.googleusercontent.com",
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name } = payload;
+
+    // Check if user exists
+    let user = await usersCollection.findOne({ email });
+
+    if (!user) {
+      // If not, create user (password empty because Google)
+      const newUser = { name, email, password: '' };
+      const result = await usersCollection.insertOne(newUser);
+      user = { _id: result.insertedId, name, email };
+    }
+
+
+    // Create JWT for frontend
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: '5h' }
+    );
+
+    res.status(200).json({ message: 'Google signup/login successful', token });
+
+  } catch (err) {
+    console.error('Google signup error:', err);
+    res.status(400).json({ message: 'Google signup failed' });
+  }
+});
+
 
 // User login
 app.post('/signin', async (req, res) => {
