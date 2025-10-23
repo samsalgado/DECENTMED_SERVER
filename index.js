@@ -314,8 +314,17 @@ async function connectToDB() {
 
 
 // ================== MIDDLEWARE ==================
-// const corsConfig = { origin: "http://localhost:3000", credentials: true, methods: ['GET','POST','PUT','PATCH','DELETE'] };
-const corsConfig = { origin: "https://themerlingroupworld.com", credentials: true, methods: ['GET','POST','PUT','PATCH','DELETE'] };
+// const corsConfig = { origin: "http://localhost:3000", credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] };
+
+const corsConfig = {
+  origin: [
+    "https://decentmed.org",
+    "https://themerlingroupworld.com"
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+};
+
 app.use(cors(corsConfig));
 app.use(express.json());
 
@@ -340,7 +349,7 @@ const verifyToken = (req, res, next) => {
 app.get('/', (req, res) => { res.send('Server is running!'); });
 
 // ================== JWT ==================
-app.post('/jwt', async (req,res)=>{
+app.post('/jwt', async (req, res) => {
   await connectToDB();
   const user = req.body;
   const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '5h' });
@@ -348,178 +357,197 @@ app.post('/jwt', async (req,res)=>{
 });
 
 // ================== USERS ==================
-app.get('/users', verifyToken, async (req,res)=>{
+app.get('/users', verifyToken, async (req, res) => {
   await connectToDB();
   const users = await usersCollection.find().toArray();
   res.json(users);
 });
 
-app.post('/users', async (req,res)=>{
+
+// ================== USER PROFILE ROUTE ==================
+app.get('/me', verifyToken, async (req, res) => {
   await connectToDB();
-  const { name,email,password,code } = req.body;
-  const existingUser = await usersCollection.findOne({email});
-  if(existingUser) return res.status(400).json({message:"User already exists"});
-  const hashedPassword = await bcrypt.hash(password,10);
-  const newUser = {name,email,password:hashedPassword,code};
+  const user = await usersCollection.findOne(
+    { email: req.user.email },
+    { projection: { password: 0 } } // password hide
+  );
+  if (!user) return res.status(404).json({ message: "User not found" });
+  res.json(user);
+});
+
+
+app.post('/users', async (req, res) => {
+  await connectToDB();
+  const { name, email, password, code } = req.body;
+  const existingUser = await usersCollection.findOne({ email });
+  if (existingUser) return res.status(400).json({ message: "User already exists" });
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const newUser = { name, email, password: hashedPassword, code };
   const result = await usersCollection.insertOne(newUser);
-  const token = jwt.sign({id:result.insertedId,email}, process.env.ACCESS_TOKEN_SECRET,{expiresIn:'5h'});
-  res.status(201).json({message:"Signup successful",token});
+  const token = jwt.sign({ id: result.insertedId, email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '5h' });
+  res.status(201).json({ message: "Signup successful", token });
 });
 
-app.post('/signin', async (req,res)=>{
+app.post('/signin', async (req, res) => {
   await connectToDB();
-  const { email,password } = req.body;
-  const user = await usersCollection.findOne({email});
-  if(!user) return res.status(400).json({message:"Invalid credentials"});
-  const isValid = await bcrypt.compare(password,user.password);
-  if(!isValid) return res.status(400).json({message:"Invalid credentials"});
-  const token = jwt.sign({id:user._id,email:user.email}, process.env.ACCESS_TOKEN_SECRET,{expiresIn:'5h'});
-  res.json({message:"Login successful",token});
+  const { email, password } = req.body;
+  const user = await usersCollection.findOne({ email });
+  if (!user) return res.status(400).json({ message: "Invalid credentials" });
+  const isValid = await bcrypt.compare(password, user.password);
+  if (!isValid) return res.status(400).json({ message: "Invalid credentials" });
+  const token = jwt.sign({ id: user._id, email: user.email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '5h' });
+  res.json({ message: "Login successful", token });
 });
 
-app.post('/google-signup', async (req,res)=>{
+app.post('/google-signup', async (req, res) => {
   await connectToDB();
   const { credential } = req.body;
-  if(!credential) return res.status(400).json({message:"No credential provided"});
-  try{
+  if (!credential) return res.status(400).json({ message: "No credential provided" });
+  try {
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const { email, name } = payload;
-    let user = await usersCollection.findOne({email});
-    if(!user){
-      const result = await usersCollection.insertOne({name,email,password:""});
+    let user = await usersCollection.findOne({ email });
+    if (!user) {
+      const result = await usersCollection.insertOne({ name, email, password: "" });
       user = { _id: result.insertedId, name, email };
     }
-    const token = jwt.sign({id:user._id,email:user.email}, process.env.ACCESS_TOKEN_SECRET,{expiresIn:'7h'});
-    res.json({message:"Google signup/login successful", token});
-  } catch(err){
+    const token = jwt.sign({ id: user._id, email: user.email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '7h' });
+    res.json({ message: "Google signup/login successful", token });
+  } catch (err) {
     console.error(err);
-    res.status(400).json({message:"Google signup failed"});
+    res.status(400).json({ message: "Google signup failed" });
   }
 });
 
 // ================== PAYMENTS ==================
-app.post('/create-payment-intent', verifyToken, async (req,res)=>{
+app.post('/create-payment-intent', verifyToken, async (req, res) => {
   await connectToDB();
   const { price } = req.body;
-  if(!price || price<=0) return res.status(400).json({message:"Invalid price"});
-  try{
-    const paymentIntent = await stripe.paymentIntents.create({ amount: Math.round(price*100), currency:'usd', payment_method_types:['card'] });
-    res.json({clientSecret:paymentIntent.client_secret});
-  } catch(err){
+  if (!price || price <= 0) return res.status(400).json({ message: "Invalid price" });
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      // amount: Math.round(price * 100),
+      amount: price,   // 🔹 Already cents, don't multiply
+      currency: 'usd',
+      payment_method_types: ['card']
+    });
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (err) {
     console.error(err);
-    res.status(500).json({message:"Stripe payment intent failed"});
+    res.status(500).json({ message: "Stripe payment intent failed" });
   }
 });
 
-app.post('/payments', verifyToken, async (req,res)=>{
+app.post('/payments', verifyToken, async (req, res) => {
   await connectToDB();
   const payment = req.body;
   const result = await paymentsCollection.insertOne(payment);
   res.json(result);
 });
 
+
 // ================== CONTACT EMAIL ==================
-app.post('/send-email', async (req,res)=>{
-  const { name,email,phone } = req.body;
-  const transporter = nodemailer.createTransport({ service:'gmail', auth:{user:process.env.EMAIL_USER,pass:process.env.EMAIL_PASS} });
-  const mailOptions = { from:`"Contact Form" <${process.env.EMAIL_USER}>`, to:'samueljuansalgado@gmail.com', subject:'New Contact Request from', text:`Name:${name}\nEmail:${email}\nPhone:${phone}` };
-  try{
+app.post('/send-email', async (req, res) => {
+  const { name, email, phone } = req.body;
+  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS } });
+  const mailOptions = { from: `"Contact Form" <${process.env.EMAIL_USER}>`, to: 'samueljuansalgado@gmail.com', subject: 'New Contact Request from', text: `Name:${name}\nEmail:${email}\nPhone:${phone}` };
+  try {
     await transporter.sendMail(mailOptions);
-    res.json({message:"Email sent successfully"});
-  } catch(err){
+    res.json({ message: "Email sent successfully" });
+  } catch (err) {
     console.error(err);
-    res.status(500).json({message:"Email failed to send"});
+    res.status(500).json({ message: "Email failed to send" });
   }
 });
 
 // ================== NEW CODE START: PROVIDER & BOOKING SYSTEM ==================
 
 // ---- Add a new provider (admin only) ----
-app.post('/api/providers', verifyToken, async (req,res)=>{
+app.post('/api/providers', verifyToken, async (req, res) => {
   await connectToDB();
-  const { name,specialization } = req.body;
-  const newProvider = { name, specialization, slots:[] };
+  const { name, specialization } = req.body;
+  const newProvider = { name, specialization, slots: [] };
   const result = await providersCollection.insertOne(newProvider);
-  res.json({message:"Provider added", result});
+  res.json({ message: "Provider added", result });
 });
 
 // ---- Get all providers ----
-app.get('/api/providers', async (req,res)=>{
+app.get('/api/providers', async (req, res) => {
   await connectToDB();
   const providers = await providersCollection.find().toArray();
   res.json(providers);
 });
 
 // ---- Get provider slots ----
-app.get('/api/providers/:id/slots', async (req,res)=>{
+app.get('/api/providers/:id/slots', async (req, res) => {
   await connectToDB();
   const { id } = req.params;
-  const provider = await providersCollection.findOne({_id:new ObjectId(id)});
+  const provider = await providersCollection.findOne({ _id: new ObjectId(id) });
   res.json(provider?.slots || []);
 });
 
 // ---- Add slots to provider ----
-app.post('/api/providers/:id/slots', verifyToken, async (req,res)=>{
+app.post('/api/providers/:id/slots', verifyToken, async (req, res) => {
   await connectToDB();
   const { id } = req.params;
   const { slots } = req.body; // [{date,time,booked:false}]
-  const provider = await providersCollection.findOne({_id:new ObjectId(id)});
-  if(!provider) return res.status(404).json({message:"Provider not found"});
+  const provider = await providersCollection.findOne({ _id: new ObjectId(id) });
+  if (!provider) return res.status(404).json({ message: "Provider not found" });
   const updatedSlots = [...(provider.slots || []), ...slots];
-  await providersCollection.updateOne({_id:new ObjectId(id)}, {$set:{slots:updatedSlots}});
-  res.json({message:"Slots added"});
+  await providersCollection.updateOne({ _id: new ObjectId(id) }, { $set: { slots: updatedSlots } });
+  res.json({ message: "Slots added" });
 });
 
 // ---- Book an appointment ----
-app.post('/api/bookings', verifyToken, async (req,res)=>{
+app.post('/api/bookings', verifyToken, async (req, res) => {
   await connectToDB();
-  const { providerId,date,time,userName,userEmail } = req.body;
-  const provider = await providersCollection.findOne({_id:new ObjectId(providerId)});
-  if(!provider) return res.status(404).json({message:"Provider not found"});
-  const slotIndex = provider.slots.findIndex(s=>s.date===date && s.time===time && !s.booked);
-  if(slotIndex===-1) return res.status(400).json({message:"Slot not available"});
+  const { providerId, date, time, userName, userEmail } = req.body;
+  const provider = await providersCollection.findOne({ _id: new ObjectId(providerId) });
+  if (!provider) return res.status(404).json({ message: "Provider not found" });
+  const slotIndex = provider.slots.findIndex(s => s.date === date && s.time === time && !s.booked);
+  if (slotIndex === -1) return res.status(400).json({ message: "Slot not available" });
   provider.slots[slotIndex].booked = true;
-  await providersCollection.updateOne({_id:new ObjectId(providerId)}, {$set:{slots:provider.slots}});
+  await providersCollection.updateOne({ _id: new ObjectId(providerId) }, { $set: { slots: provider.slots } });
   const booking = { providerId, date, time, userName, userEmail };
   const result = await bookingsCollection.insertOne(booking);
-  res.json({message:"Booking successful", result});
+  res.json({ message: "Booking successful", result });
 });
 
 // ---- Get bookings by provider ----
-app.get('/api/bookings/:providerId', verifyToken, async (req,res)=>{
+app.get('/api/bookings/:providerId', verifyToken, async (req, res) => {
   await connectToDB();
   const { providerId } = req.params;
-  const bookings = await bookingsCollection.find({providerId}).toArray();
+  const bookings = await bookingsCollection.find({ providerId }).toArray();
   res.json(bookings);
 });
 
 // ---- Admin: get all bookings ----
-app.get('/api/admin/bookings', verifyToken, async (req,res)=>{
+app.get('/api/admin/bookings', verifyToken, async (req, res) => {
   await connectToDB();
   const bookings = await bookingsCollection.find().toArray();
   res.json(bookings);
 });
 
 // ---- Admin: get all providers ----
-app.get('/api/admin/providers', verifyToken, async (req,res)=>{
+app.get('/api/admin/providers', verifyToken, async (req, res) => {
   await connectToDB();
   const providers = await providersCollection.find().toArray();
   res.json(providers);
 });
 
 // ---- Admin: update provider slots ----
-app.patch('/api/admin/providers/:id/slots', verifyToken, async (req,res)=>{
+app.patch('/api/admin/providers/:id/slots', verifyToken, async (req, res) => {
   await connectToDB();
   const { id } = req.params;
   const { slots } = req.body;
-  await providersCollection.updateOne({_id:new ObjectId(id)}, {$set:{slots}});
-  res.json({message:"Slots updated"});
+  await providersCollection.updateOne({ _id: new ObjectId(id) }, { $set: { slots } });
+  res.json({ message: "Slots updated" });
 });
 
 // ================== NEW CODE END ==================
 
-app.listen(process.env.PORT || 5000, ()=>console.log(`🚀 Server running on port ${process.env.PORT || 5000}`));
+app.listen(process.env.PORT || 5000, () => console.log(`🚀 Server running on port ${process.env.PORT || 5000}`));
 module.exports = app;
 
 
