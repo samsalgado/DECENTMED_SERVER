@@ -280,6 +280,15 @@ const { OAuth2Client } = require('google-auth-library');
 
 const app = express();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://decentmed.org",
+    "https://www.decentmed.org"
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  credentials: true
+}));
 
 
 // ================== DATABASE ==================
@@ -316,16 +325,6 @@ async function connectToDB() {
 // ================== MIDDLEWARE ==================
 // const corsConfig = { origin: "http://localhost:3000", credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] };
 
-const corsConfig = {
-  origin: [
-    "https://decentmed.org",
-    "https://themerlingroupworld.com"
-  ],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
-};
-
-app.use(cors(corsConfig));
 app.use(express.json());
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
