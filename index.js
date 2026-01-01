@@ -276,6 +276,7 @@ const nodemailer = require('nodemailer');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const { OAuth2Client } = require('google-auth-library');
 
 const app = express();
